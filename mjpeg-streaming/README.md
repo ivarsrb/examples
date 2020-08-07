@@ -95,8 +95,8 @@ func getPicture(w http.ResponseWriter, r *http.Request) {
 	w.Write(imgBytes)
 }
 ```
-At first we create image in memory and return pointer to slice of bytes. Then we set our response headers in the way that lets browser understand what ir got back. We set image type and image size. And finally we send the byte buffer itself.
-Spin up the server with command `go run` and open browser pointing to `localhost:8080`. You should see blue square that is effectivly the image we crated and sent from server. But there is no animation in this example. Let's fix this now! 
+At first we create image in memory and return pointer to slice of bytes. Then we set our response headers in the way that lets browser understand what ir gets back. We set image type and image size. And finally we send the byte buffer itself.
+Spin up the server with command `go run` and open browser pointing to `localhost:8080`. You should see blue square that is effectivly the image we crated and sent from server. "But there is no animation in this example!" you say. Let's fix this now! 
 ## Sending images one after the other
 * Create simple animation of changing three images in browser
 ## Sine wave animation
