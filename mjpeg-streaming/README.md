@@ -1,0 +1,1 @@
+Motion-JPEG streaming in example in Go
