@@ -63,13 +63,40 @@ func getJPEG(w int, h int, color color.RGBA) []byte {
 	return buff.Bytes()
 }
 ```
-And use it like
+And use it like this to create blue image of 200x200 pixels
 ``` go
 imgBytes := getJPEG(200, 200, color.RGBA{0, 0, 255, 255})
 ```
-Now that we have image data in memory and pointer pointing to it let's see how to send it over HTTP connection.
-## Sending image over HTTP and rendering it in browser
-* create single blue image and show it in browser 
+Now that we have an image data in memory and a pointer pointing to it let's look at how to send it over HTTP connection.
+## Sending image over HTTP to client browser
+In order to create our client-server application we will ned bot server and client parts. Th client par will be simple HTML document, for the server part we will create HTTP server that lsitenss to incomming connections and responds with imaga data when requested.
+In `main` function add the following lines
+``` go
+func main() {
+    http.Handle("/", http.FileServer(http.Dir("./static")))
+    http.HandleFunc("/picture", getPicture)
+    port := "8080"
+    log.Fatal(http.ListenAndServe(":"+port, nil))
+}
+```
+HTTP server wil listen for incomming connections on port `8080`. Static files, like HTML index page will be served from `/static` directory. If the client sends GET request to `/picture` URL path the response will be sent back by our server. In this case function `getPicture` is responsible for sending back our image data.  
+Client code is basic HTML template with `<img>` element that sends GET request to URL `/pictures` upon page loading and renders the response as an image.
+``` HTML
+<body>
+    <img style="border:2px solid black" src="/picture"  />
+</body>
+```
+Our job is to send the response in the way browser can correctly interpret. Let's implement `getPicture` function.
+``` go
+func getPicture(w http.ResponseWriter, r *http.Request) {
+	imgBytes := getJPEG(200, 200, blue)
+	w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("Content-Length", strconv.Itoa(len(imgBytes)))
+	w.Write(imgBytes)
+}
+```
+At first we create image in memory and return pointer to slice of bytes. Then we set our response headers in the way that lets browser understand what ir got back. We set image type and image size. And finally we send the byte buffer itself.
+Spin up the server with command `go run` and open browser pointing to `localhost:8080`. You should see blue square that is effectivly the image we crated and sent from server. But there is no animation in this example. Let's fix this now! 
 ## Sending images one after the other
 * Create simple animation of changing three images in browser
 ## Sine wave animation
