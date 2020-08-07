@@ -41,9 +41,9 @@ func getPicture(w http.ResponseWriter, r *http.Request) {
 // getJPEG creates a single color image with given dimensions and color.
 // Returns the image as a slice of jpeg bytes
 func getJPEG(w int, h int, color color.RGBA) []byte {
-	myImage := image.NewRGBA(image.Rect(0, 0, w, h))
-	draw.Draw(myImage, myImage.Bounds(), &image.Uniform{color}, image.ZP, draw.Src)
+	im := image.NewRGBA(image.Rect(0, 0, w, h))
+	draw.Draw(im, im.Bounds(), &image.Uniform{color}, image.ZP, draw.Src)
 	var buff bytes.Buffer
-	jpeg.Encode(&buff, myImage, nil)
+	jpeg.Encode(&buff, im, nil)
 	return buff.Bytes()
 }
