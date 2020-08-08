@@ -318,4 +318,5 @@ func getSinewaves(w http.ResponseWriter, r *http.Request) {
 ```
 Now when you start the server and refresh your browser you should see sine wave animation.
 ## Conclusion
-
+We've created a simple animation by generating JPEG images on the server and streaming them one by one to the client which in turn rendered them to browser.  
+The code above is for presenting the live-streaming idea and is in no way optimised. Go standard library `Image` package probably isn't well suitet for real time animation either. In the next tutorial we will try streaming something more colorfull using a more powerfull rendering library - OpenGL.
