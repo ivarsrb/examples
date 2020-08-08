@@ -98,7 +98,88 @@ func getPicture(w http.ResponseWriter, r *http.Request) {
 At first we create image in memory and return pointer to slice of bytes. Then we set our response headers in the way that lets browser understand what ir gets back. We set image type and image size. And finally we send the byte buffer itself.
 Spin up the server with command `go run` and open browser pointing to `localhost:8080`. You should see blue square that is effectivly the image we crated and sent from server. "But there is no animation in this example!" you say. Let's fix this now! 
 ## Sending images one after the other
-* Create simple animation of changing three images in browser
+Let's add new URL path to our server and a handler respensible for the response.
+``` go
+http.HandleFunc("/animation", getAnimation)
+```
+``` go
+func getAnimation(w http.ResponseWriter, r *http.Request) {
+}
+```
+Also don't forget to change `src` attribute in `<img>` tag.   
+To create basic animation we will need a couple images to show one right after another. By using our helper function create three images - red, yellow and green, that, when animated, will give as an illusion of changing traffic lights.
+``` go
+size = 200
+var (
+	red    = color.RGBA{255, 0, 0, 255}
+	green  = color.RGBA{0, 255, 0, 255}
+	yellow = color.RGBA{255, 255, 0, 255}
+)
+imgRed := getJPEG(size, size, red)
+imgYellow := getJPEG(size, size, yellow)
+imgGreen := getJPEG(size, size, green)
+```
+Now we can start sending animation back to our client. At first we indicate that response is going to consist of multiple parts separated by `boundry`.
+``` go
+const boundary = "abcd4321"
+w.Header().Set("Content-Type", "multipart/x-mixed-replace; boundary="+boundary)
+```
+For `boundry` I chose an arbitrary string, but it could be anything as long as it is not going to appear in the data we want to separate.  
+At this point, according to M-JPEG response format, we can stream all our images one by one and hopefully see the animation.
+``` go
+w.Write([]byte("\r\n--" + boundary + "\r\n"))
+w.Write([]byte("Content-Type: image/jpeg\r\nContent-Length: " + strconv.Itoa(len(imgRed)) + "\r\n\r\n"))
+w.Write(imgRed)
+w.Write([]byte("\r\n--" + boundary + "\r\n"))
+w.Write([]byte("Content-Type: image/jpeg\r\nContent-Length: " + strconv.Itoa(len(imgYellow)) + "\r\n\r\n"))
+w.Write(imgYellow)
+w.Write([]byte("\r\n--" + boundary + "\r\n"))
+w.Write([]byte("Content-Type: image/jpeg\r\nContent-Length: " + strconv.Itoa(len(imgGreen)) + "\r\n\r\n"))
+w.Write(imgGreen)
+w.Write([]byte("\r\n--" + boundary + "\r\n"))
+```
+When you run the server and refresh your browser you will only see a green square. Why? The reason is that all of our response is sent all at once instead of image by image. This is how HTTP originally operates - the response is gathered and sent when it is finished or buffer size limit is reached. But this is not what we want, we are developing a live-streaming service. Luckally for us we can work around that. `http.ResponseWriter` parameter that is provided to us through the handler (usually) implements `http.Flusher` that will allow us to flsuh the buffer and send our data to client immidiatly. Let's obtain `Flusher` like so
+``` go
+f, ok := w.(http.Flusher)
+if !ok {
+    log.Println("HTTP buffer flushing is not implemented")
+}
+```
+and call it's `Flush()` method in between frames 
+``` go
+w.Write([]byte("\r\n--" + boundary + "\r\n"))
+w.Write([]byte("Content-Type: image/jpeg\r\nContent-Length: " + strconv.Itoa(len(imgRed)) + "\r\n\r\n"))
+w.Write(imgRed)
+w.Write([]byte("\r\n--" + boundary + "\r\n"))
+f.Flush()
+w.Write([]byte("Content-Type: image/jpeg\r\nContent-Length: " + strconv.Itoa(len(imgYellow)) + "\r\n\r\n"))
+w.Write(imgYellow)
+w.Write([]byte("\r\n--" + boundary + "\r\n"))
+f.Flush()
+w.Write([]byte("Content-Type: image/jpeg\r\nContent-Length: " + strconv.Itoa(len(imgGreen)) + "\r\n\r\n"))
+w.Write(imgGreen)
+w.Write([]byte("\r\n--" + boundary + "\r\n"))
+```
+When you re-run the server now you will still probably see a green square with no animation. There is one more thing missing that you probably already guessed - we have no delay between our frames, so we just physically can't catch the sight of the red and yellow images as they whiz by. Let's insert delay in between our frames
+``` go
+delay = 500 * time.Millisecond
+w.Write([]byte("\r\n--" + boundary + "\r\n"))
+w.Write([]byte("Content-Type: image/jpeg\r\nContent-Length: " + strconv.Itoa(len(imgRed)) + "\r\n\r\n"))
+w.Write(imgRed)
+w.Write([]byte("\r\n--" + boundary + "\r\n"))
+f.Flush()
+time.Sleep(delay)
+w.Write([]byte("Content-Type: image/jpeg\r\nContent-Length: " + strconv.Itoa(len(imgYellow)) + "\r\n\r\n"))
+w.Write(imgYellow)
+w.Write([]byte("\r\n--" + boundary + "\r\n"))
+f.Flush()
+time.Sleep(delay)
+w.Write([]byte("Content-Type: image/jpeg\r\nContent-Length: " + strconv.Itoa(len(imgGreen)) + "\r\n\r\n"))
+w.Write(imgGreen)
+w.Write([]byte("\r\n--" + boundary + "\r\n"))
+```
+Finally you should be able to see an animation we were aiming at.  
+It worked fine as a demonstration but obviously *hardcoding* frame after frame is not the proper way to write and animation. In the next section we will implement a procedural approach that will ad a lot more felxibility. 
 ## Sine wave animation
 * Explain sine equation
 * Show how to render it live

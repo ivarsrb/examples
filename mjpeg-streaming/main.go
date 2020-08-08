@@ -16,9 +16,10 @@ import (
 
 // Define common colors for convenience
 var (
-	blue  = color.RGBA{0, 0, 255, 255}
-	red   = color.RGBA{255, 0, 0, 255}
-	green = color.RGBA{0, 255, 0, 255}
+	blue   = color.RGBA{0, 0, 255, 255}
+	red    = color.RGBA{255, 0, 0, 255}
+	green  = color.RGBA{0, 255, 0, 255}
+	yellow = color.RGBA{255, 255, 0, 255}
 )
 
 // Boundary will separate frames in M-JPEG animation transfer
@@ -63,7 +64,7 @@ func getAnimation(w http.ResponseWriter, r *http.Request) {
 		// Size of images
 		size = 200
 		// Delay between frames in miliseconds
-		delay = 200 * time.Millisecond
+		delay = 500 * time.Millisecond
 	)
 	// To send buffered data to client right away
 	f, ok := w.(http.Flusher)
@@ -71,21 +72,21 @@ func getAnimation(w http.ResponseWriter, r *http.Request) {
 		log.Println("HTTP buffer flushing is not implemented")
 	}
 	// Sample images
-	imgBlue := getJPEG(size, size, blue)
 	imgRed := getJPEG(size, size, red)
+	imgYellow := getJPEG(size, size, yellow)
 	imgGreen := getJPEG(size, size, green)
 	// Set headers and content to send as a response
 	w.Header().Set("Content-Type", "multipart/x-mixed-replace; boundary="+boundary)
 	w.Write([]byte("\r\n--" + boundary + "\r\n"))
-	w.Write([]byte("Content-Type: image/jpeg\r\nContent-Length: " + strconv.Itoa(len(imgBlue)) + "\r\n\r\n"))
-	w.Write(imgBlue)
+	w.Write([]byte("Content-Type: image/jpeg\r\nContent-Length: " + strconv.Itoa(len(imgRed)) + "\r\n\r\n"))
+	w.Write(imgRed)
 	w.Write([]byte("\r\n--" + boundary + "\r\n"))
 	// Otherwise buffer will be flushed after handler exits or buffer maxsize is full
 	f.Flush()
 	// Delay
 	time.Sleep(delay)
-	w.Write([]byte("Content-Type: image/jpeg\r\nContent-Length: " + strconv.Itoa(len(imgRed)) + "\r\n\r\n"))
-	w.Write(imgRed)
+	w.Write([]byte("Content-Type: image/jpeg\r\nContent-Length: " + strconv.Itoa(len(imgYellow)) + "\r\n\r\n"))
+	w.Write(imgYellow)
 	w.Write([]byte("\r\n--" + boundary + "\r\n"))
 	f.Flush()
 	time.Sleep(delay)
@@ -103,7 +104,7 @@ func getSinewaves(w http.ResponseWriter, r *http.Request) {
 		blueIndex  = 1
 	)
 	const (
-		// Size of image frame
+		// Size of an image frame
 		width  = 400
 		height = 300
 		// Number of frames in animation
