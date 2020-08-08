@@ -1,4 +1,4 @@
-# Streaming server-side animation to browser using M-JPEG and Go
+# Server-side animation live streaming with MJPEG and Go
 
 ## Introduction
 Most of the time, when developing client-server applications, real-time animations are performed directly on the client side using rendering APIs such as WebGL or WebGPU. The data to be rendered and rendering code are sent from server to client and then rendered by the browser engine using Graphics Processing Unit (GPU) from the clients machine. The benefits are obvious - server is freed from potentially massive amount of work if large numbers of clients connect simultaniously.  

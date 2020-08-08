@@ -8,6 +8,7 @@ import (
 	"image/draw"
 	"image/jpeg"
 	"log"
+	"math"
 	"net/http"
 	"strconv"
 	"time"
@@ -30,6 +31,8 @@ func main() {
 	http.HandleFunc("/picture", getPicture)
 	// Handle simple animation request
 	http.HandleFunc("/animation", getAnimation)
+	// Handle sine wave animation request
+	http.HandleFunc("/sinewaves", getSinewaves)
 	// Start a server on the port
 	port := "8080"
 	log.Fatal(http.ListenAndServe(":"+port, nil))
@@ -56,37 +59,99 @@ func getPicture(w http.ResponseWriter, r *http.Request) {
 
 // getAnimation creates sample images and sends them one after the other to client
 func getAnimation(w http.ResponseWriter, r *http.Request) {
-	// Sample images
-	imgBlue := getJPEG(200, 200, blue)
-	imgRed := getJPEG(200, 200, red)
-	imgGreen := getJPEG(200, 200, green)
-	delay := 500 * time.Millisecond
-	// To send buffered data to client
+	const (
+		// Size of images
+		size = 200
+		// Delay between frames in miliseconds
+		delay = 200 * time.Millisecond
+	)
+	// To send buffered data to client right away
 	f, ok := w.(http.Flusher)
 	if !ok {
-		log.Println("Buffer fulshing is not implemented")
+		log.Println("HTTP buffer flushing is not implemented")
 	}
+	// Sample images
+	imgBlue := getJPEG(size, size, blue)
+	imgRed := getJPEG(size, size, red)
+	imgGreen := getJPEG(size, size, green)
 	// Set headers and content to send as a response
 	w.Header().Set("Content-Type", "multipart/x-mixed-replace; boundary="+boundary)
-
 	w.Write([]byte("\r\n--" + boundary + "\r\n"))
 	w.Write([]byte("Content-Type: image/jpeg\r\nContent-Length: " + strconv.Itoa(len(imgBlue)) + "\r\n\r\n"))
 	w.Write(imgBlue)
 	w.Write([]byte("\r\n--" + boundary + "\r\n"))
-
 	// Otherwise buffer will be flushed after handler exits or buffer maxsize is full
 	f.Flush()
 	// Delay
 	time.Sleep(delay)
-
 	w.Write([]byte("Content-Type: image/jpeg\r\nContent-Length: " + strconv.Itoa(len(imgRed)) + "\r\n\r\n"))
 	w.Write(imgRed)
 	w.Write([]byte("\r\n--" + boundary + "\r\n"))
-
 	f.Flush()
 	time.Sleep(delay)
-
 	w.Write([]byte("Content-Type: image/jpeg\r\nContent-Length: " + strconv.Itoa(len(imgGreen)) + "\r\n\r\n"))
 	w.Write(imgGreen)
 	w.Write([]byte("\r\n--" + boundary + "\r\n"))
+}
+
+// getSinewaves generates and streams animation of a sine wave
+func getSinewaves(w http.ResponseWriter, r *http.Request) {
+	var palette = []color.Color{color.White, blue}
+	const (
+		// First color in palette
+		whiteIndex = 0
+		blueIndex  = 1
+	)
+	const (
+		// Size of image frame
+		width  = 400
+		height = 300
+		// Number of frames in animation
+		nframes = 60
+		// Delay between frames in miliseconds
+		delay = 50 * time.Millisecond
+	)
+	// To send buffered data to client right away
+	f, ok := w.(http.Flusher)
+	if !ok {
+		log.Println("HTTP buffer flushing is not implemented")
+	}
+	w.Header().Set("Content-Type", "multipart/x-mixed-replace; boundary="+boundary)
+	// Start animation frame by frame
+	for i := 0; i < nframes; i++ {
+		// Create paletted image of the size and aplette
+		rect := image.Rect(0, 0, width, height)
+		img := image.NewPaletted(rect, palette)
+		// Animate sine wave and store it in our image
+		// y = a*sin(b*x + c) + d
+		for t := 0; t < width; t++ {
+			// Draw from left to right
+			x := float64(t)
+			// Amplitude
+			a := height / 3.0
+			// Period is 2*pi / b
+			b := 0.01
+			// Phase shift
+			c := float64(i) / 6.0
+			// Vertical shift
+			d := height / 2.0
+			y := a*math.Sin(x*b+c) + d
+			img.SetColorIndex(int(x), int(y), blueIndex)
+		}
+		// Encode image to JPEG and get it's representation in bytes
+		var buff bytes.Buffer
+		jpeg.Encode(&buff, img, nil)
+		imgBytes := buff.Bytes()
+		// Stream image back to client
+		// For the first frame we need to draw boundry at the beginning
+		if i == 0 {
+			w.Write([]byte("\r\n--" + boundary + "\r\n"))
+		}
+		w.Write([]byte("Content-Type: image/jpeg\r\nContent-Length: " + strconv.Itoa(len(imgBytes)) + "\r\n\r\n"))
+		w.Write(imgBytes)
+		w.Write([]byte("\r\n--" + boundary + "\r\n"))
+		// Otherwise buffer will be flushed after handler exits or buffer maxsize is full
+		f.Flush()
+		time.Sleep(delay)
+	}
 }
