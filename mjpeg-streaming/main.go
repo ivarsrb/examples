@@ -33,7 +33,7 @@ func main() {
 	// Handle simple animation request
 	http.HandleFunc("/animation", getAnimation)
 	// Handle sine wave animation request
-	http.HandleFunc("/sinewaves", getSinewaves)
+	http.HandleFunc("/wave", getSinewaves)
 	// Start a server on the port
 	port := "8080"
 	log.Fatal(http.ListenAndServe(":"+port, nil))
@@ -119,21 +119,20 @@ func getSinewaves(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "multipart/x-mixed-replace; boundary="+boundary)
 	// Start animation frame by frame
-	for i := 0; i < nframes; i++ {
+	for t := 0; t < nframes; t++ {
 		// Create paletted image of the size and aplette
-		rect := image.Rect(0, 0, width, height)
-		img := image.NewPaletted(rect, palette)
+		img := image.NewPaletted(image.Rect(0, 0, width, height), palette)
 		// Animate sine wave and store it in our image
 		// y = a*sin(b*x + c) + d
-		for t := 0; t < width; t++ {
+		for n := 0; n < width; n++ {
 			// Draw from left to right
-			x := float64(t)
+			x := float64(n)
 			// Amplitude
 			a := height / 3.0
 			// Period is 2*pi / b
 			b := 0.01
 			// Phase shift
-			c := float64(i) / 6.0
+			c := float64(t) / 6.0
 			// Vertical shift
 			d := height / 2.0
 			y := a*math.Sin(x*b+c) + d
@@ -145,7 +144,7 @@ func getSinewaves(w http.ResponseWriter, r *http.Request) {
 		imgBytes := buff.Bytes()
 		// Stream image back to client
 		// For the first frame we need to draw boundry at the beginning
-		if i == 0 {
+		if t == 0 {
 			w.Write([]byte("\r\n--" + boundary + "\r\n"))
 		}
 		w.Write([]byte("Content-Type: image/jpeg\r\nContent-Length: " + strconv.Itoa(len(imgBytes)) + "\r\n\r\n"))

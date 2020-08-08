@@ -97,10 +97,12 @@ func getPicture(w http.ResponseWriter, r *http.Request) {
 ```
 At first we create image in memory and return pointer to slice of bytes. Then we set our response headers in the way that lets browser understand what ir gets back. We set image type and image size. And finally we send the byte buffer itself.
 Spin up the server with command `go run` and open browser pointing to `localhost:8080`. You should see blue square that is effectivly the image we crated and sent from server. "But there is no animation in this example!" you say. Let's fix this now! 
-## Sending images one after the other
+## Simple animation
 Let's add new URL path to our server and a handler respensible for the response.
 ``` go
+...
 http.HandleFunc("/animation", getAnimation)
+...
 ```
 ``` go
 func getAnimation(w http.ResponseWriter, r *http.Request) {
@@ -125,7 +127,7 @@ const boundary = "abcd4321"
 w.Header().Set("Content-Type", "multipart/x-mixed-replace; boundary="+boundary)
 ```
 For `boundry` I chose an arbitrary string, but it could be anything as long as it is not going to appear in the data we want to separate.  
-At this point, according to M-JPEG response format, we can stream all our images one by one and hopefully see the animation.
+At this point, according to M-JPEG response format we discussed earlier, we can stream all our images one by one and hopefully see the animation.
 ``` go
 w.Write([]byte("\r\n--" + boundary + "\r\n"))
 w.Write([]byte("Content-Type: image/jpeg\r\nContent-Length: " + strconv.Itoa(len(imgRed)) + "\r\n\r\n"))
@@ -179,8 +181,141 @@ w.Write(imgGreen)
 w.Write([]byte("\r\n--" + boundary + "\r\n"))
 ```
 Finally you should be able to see an animation we were aiming at.  
-It worked fine as a demonstration but obviously *hardcoding* frame after frame is not the proper way to write and animation. In the next section we will implement a procedural approach that will ad a lot more felxibility. 
+It worked fine as a demonstration but obviously *hardcoding* frame after frame is not the proper way to write and animation. In the next section we will implement a procedural approach that will be a lot more flexible. 
 ## Sine wave animation
-* Explain sine equation
-* Show how to render it live
+In this section we are going to make something a bit more interesting than traffic light. Let's animate a sliding wave. Wave will be simulated using simple sine wave function:
+> **y** = A * sin(B***x** + C) + D 
+
+where `A` is an amplitude, `B` is period, `C` is phase shift and `D` is vertical shift. `x` and `y` are coordinates in our image space. Since we want to animate the wave we will change phase shift `C` each frame so the wave appears to be sliding right to left. 
+[image of sine wave function]  
+In terms of **pseudocode** our animation algorithm can be described as follows
+```
+for number_of_frames as t:
+    img = new_image
+    for width_of_image as n:
+        x = n
+        y = A*sin(B*x + t) + D
+        img.set_pixel( x, y, color )
+    send_to_client( img )
+```
+Having defined totol number of frames in animation, we start each frame with a blank image, then for all horizontal image pixel we find corresponding vertical pixel and render it in some other color, then, when image is formed, we send it over HTTP to client and repeat.  
+Go ahead and create new URL path `/wave` and add new handler, changle `src` atribute in HTML document to `="/wave"`
+``` go
+...
+http.HandleFunc("/wave", getSinewaves)
+...
+```
+``` go
+func getSinewaves(w http.ResponseWriter, r *http.Request) {
+}
+```
+The implementation is straight-forward. The only real difference here is that we send images over HTTP in a loop instead of hard-coding each frame in code.  
+At first we define parameters that will affect our animation
+``` go
+const (
+    width  = 400
+    height = 300
+    nframes = 60
+    delay = 50 * time.Millisecond
+)
+```
+we are familiar with the dimensions and delay; `nframes` is a number of frames in our animation.
+``` go
+w.Header().Set("Content-Type", "multipart/x-mixed-replace; boundary="+boundary)
+for t := 0; t < nframes; t++ {
+ ...
+}
+```
+Just like in previous example set content type header to indicate that we are about to send a stream in multiple parts. After that start out animation loop. Inside the loop create a new image like so
+``` go
+img := image.NewPaletted(image.Rect(0, 0, width, height), palette)
+```
+this is a new image that consists of color pointed to in `palette` argument, so we need to also define our palette
+``` go
+var palette = []color.Color{color.White, blue}
+// Indexes in palette
+const (
+    whiteIndex = 0
+    blueIndex  = 1
+)
+```
+After we have our image we can start rendering to it. Start another loop that loops across horizontal image dimension
+``` go
+for n := 0; n < width; n++ {
+    x := float64(n)
+    a := height / 3.0
+    b := 0.01
+    c := float64(t) / 6.0
+    d := height / 2.0
+    y := a*math.Sin(x*b+c) + d
+    img.SetColorIndex(int(x), int(y), blueIndex)
+}
+```
+At first we calculate our `x` and `y` coordinates that are to be colored according to sine function discussed earlier and then we set calculated pixel in the image `img` at the coordinates `(x, y)` with a color at index `blueIndex` from our image color palette.  
+The rest of the code is similar to one we discussed in the previous section. At first we encode an image into jpeg format and retrieve a slice of it's byte array;
+``` go
+var buff bytes.Buffer
+jpeg.Encode(&buff, img, nil)
+imgBytes := buff.Bytes()
+```
+then we form our response contents. Remember that animation should start with boundary marker, otherwise our first frame wil be skipped;
+``` go
+if t == 0 {
+    w.Write([]byte("\r\n--" + boundary + "\r\n"))
+}
+w.Write([]byte("Content-Type: image/jpeg\r\nContent-Length: " + strconv.Itoa(len(imgBytes)) + "\r\n\r\n"))
+w.Write(imgBytes)
+w.Write([]byte("\r\n--" + boundary + "\r\n"))
+``` 
+and finally we send our buffered image contents to client as well as pausing a bit bat the end of each frame
+``` go
+f.Flush()
+time.Sleep(delay)
+```
+Overall the handler function should look like
+``` go
+func getSinewaves(w http.ResponseWriter, r *http.Request) {
+	var palette = []color.Color{color.White, blue}
+	const (
+		whiteIndex = 0
+		blueIndex  = 1
+	)
+	const (
+		width  = 400
+		height = 300
+		nframes = 60
+		delay = 50 * time.Millisecond
+	)
+	f, ok := w.(http.Flusher)
+	if !ok {
+		log.Println("HTTP buffer flushing is not implemented")
+	}
+	w.Header().Set("Content-Type", "multipart/x-mixed-replace; boundary="+boundary)
+	for t := 0; t < nframes; t++ {
+		img := image.NewPaletted(image.Rect(0, 0, width, height), palette)
+		for n := 0; n < width; n++ {
+			x := float64(n)
+			a := height / 3.0
+			b := 0.01
+			c := float64(t) / 6.0
+			d := height / 2.0
+			y := a*math.Sin(x*b+c) + d
+			img.SetColorIndex(int(x), int(y), blueIndex)
+		}
+		var buff bytes.Buffer
+		jpeg.Encode(&buff, img, nil)
+		imgBytes := buff.Bytes()
+		if t == 0 {
+			w.Write([]byte("\r\n--" + boundary + "\r\n"))
+		}
+		w.Write([]byte("Content-Type: image/jpeg\r\nContent-Length: " + strconv.Itoa(len(imgBytes)) + "\r\n\r\n"))
+		w.Write(imgBytes)
+		w.Write([]byte("\r\n--" + boundary + "\r\n"))
+		f.Flush()
+		time.Sleep(delay)
+	}
+}
+```
+Now when you start the server and refresh your browser you should see sine wave animation.
+## Conclusion
 
