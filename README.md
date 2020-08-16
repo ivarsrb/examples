@@ -1,1 +1,1 @@
-Source examples from the blog
+An example code from [blog](ivarsblog.netlify.app).
