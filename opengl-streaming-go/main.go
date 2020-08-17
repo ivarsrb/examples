@@ -3,9 +3,11 @@ package main
 
 import (
 	"fmt"
-	"go/build"
 	"image"
 	"image/draw"
+
+	// To properly decode png texture
+	_ "image/png"
 	"log"
 	"net/http"
 	"os"
@@ -36,7 +38,7 @@ func main() {
 // getOpenglContent renders an OpenGL scene and sends the rendered images over to client
 // in the form of MJPEG video
 func getOpenglContent(w http.ResponseWriter, r *http.Request) {
-
+	renderOpengl()
 }
 
 func renderOpengl() {
@@ -331,6 +333,7 @@ var cubeVertices = []float32{
 	1.0, 1.0, 1.0, 0.0, 1.0,
 }
 
+/*
 // Set the working directory to the root of Go package, so that its assets can be accessed.
 func init() {
 	dir, err := importPathToDir("github.com/go-gl/example/gl41core-cube")
@@ -353,3 +356,4 @@ func importPathToDir(importPath string) (string, error) {
 	}
 	return p.Dir, nil
 }
+*/
