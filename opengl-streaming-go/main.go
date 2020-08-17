@@ -2,9 +2,12 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"image"
 	"image/draw"
+	"image/jpeg"
+	"strconv"
 
 	// To properly decode png texture
 	_ "image/png"
@@ -38,10 +41,12 @@ func main() {
 // getOpenglContent renders an OpenGL scene and sends the rendered images over to client
 // in the form of MJPEG video
 func getOpenglContent(w http.ResponseWriter, r *http.Request) {
-	renderOpengl()
+	w.Header().Set("Content-Type", "multipart/x-mixed-replace; boundary="+boundary)
+	//w.Header().Set("Cache-Control", "no-cache")
+	renderOpengl(w)
 }
 
-func renderOpengl() {
+func renderOpengl(w http.ResponseWriter) {
 	// GLFW event handling must run on the main OS thread
 	runtime.LockOSThread()
 
@@ -49,7 +54,7 @@ func renderOpengl() {
 		log.Fatalln("failed to initialize glfw:", err)
 	}
 	defer glfw.Terminate()
-
+	glfw.WindowHint(glfw.Visible, glfw.False)
 	glfw.WindowHint(glfw.Resizable, glfw.False)
 	glfw.WindowHint(glfw.ContextVersionMajor, 4)
 	glfw.WindowHint(glfw.ContextVersionMinor, 1)
@@ -81,7 +86,7 @@ func renderOpengl() {
 	projectionUniform := gl.GetUniformLocation(program, gl.Str("projection\x00"))
 	gl.UniformMatrix4fv(projectionUniform, 1, false, &projection[0])
 
-	camera := mgl32.LookAtV(mgl32.Vec3{3, 3, 3}, mgl32.Vec3{0, 0, 0}, mgl32.Vec3{0, 1, 0})
+	camera := mgl32.LookAtV(mgl32.Vec3{3, 3, 3}, mgl32.Vec3{0, 0, 0}, mgl32.Vec3{0, -1, 0})
 	cameraUniform := gl.GetUniformLocation(program, gl.Str("camera\x00"))
 	gl.UniformMatrix4fv(cameraUniform, 1, false, &camera[0])
 
@@ -121,11 +126,12 @@ func renderOpengl() {
 	// Configure global settings
 	gl.Enable(gl.DEPTH_TEST)
 	gl.DepthFunc(gl.LESS)
-	gl.ClearColor(1.0, 1.0, 1.0, 1.0)
+	gl.ClearColor(0.39, 0.58, 0.93, 1.0)
 
 	angle := 0.0
 	previousTime := glfw.GetTime()
-
+	// To check for first rendered frame
+	firstFrame := true
 	for !window.ShouldClose() {
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
@@ -148,6 +154,28 @@ func renderOpengl() {
 
 		gl.DrawArrays(gl.TRIANGLES, 0, 6*2*3)
 
+		// Create a buffer to store render buffer data
+		pixData := make([]byte, windowWidth*windowHeight*4)
+		// Grab the pixels from the current frame buffer
+		//gl.ReadBuffer(gl.BACK_LEFT)
+		gl.ReadPixels(0, 0, windowWidth, windowHeight, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(pixData))
+		// Create jpeg image from of bytes just retrieved from opengl framebuffer
+		img := &image.RGBA{Pix: pixData, Stride: windowWidth * 4, Rect: image.Rect(0, 0, windowWidth, windowHeight)}
+		var buff bytes.Buffer
+		jpeg.Encode(&buff, img, nil)
+		imgBytes := buff.Bytes()
+		// Send jpeg image to client to client
+		if firstFrame {
+			w.Write([]byte("\r\n--" + boundary + "\r\n"))
+			firstFrame = false
+		}
+		w.Write([]byte("Content-Type: image/jpeg\r\nContent-Length: " + strconv.Itoa(len(imgBytes)) + "\r\n\r\n"))
+		w.Write(imgBytes)
+		w.Write([]byte("\r\n--" + boundary + "\r\n"))
+		// Otherwise buffer will be flushed only after handler exits or buffer maxsize is full
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
 		// Maintenance
 		window.SwapBuffers()
 		glfw.PollEvents()
@@ -332,28 +360,3 @@ var cubeVertices = []float32{
 	1.0, 1.0, -1.0, 0.0, 0.0,
 	1.0, 1.0, 1.0, 0.0, 1.0,
 }
-
-/*
-// Set the working directory to the root of Go package, so that its assets can be accessed.
-func init() {
-	dir, err := importPathToDir("github.com/go-gl/example/gl41core-cube")
-	if err != nil {
-		log.Fatalln("Unable to find Go package in your GOPATH, it's needed to load assets:", err)
-	}
-	err = os.Chdir(dir)
-	if err != nil {
-		log.Panicln("os.Chdir:", err)
-	}
-}
-
-// importPathToDir resolves the absolute path from importPath.
-// There doesn't need to be a valid Go package inside that import path,
-// but the directory must exist.
-func importPathToDir(importPath string) (string, error) {
-	p, err := build.Import(importPath, "", build.FindOnly)
-	if err != nil {
-		return "", err
-	}
-	return p.Dir, nil
-}
-*/
