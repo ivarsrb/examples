@@ -42,11 +42,37 @@ func main() {
 // in the form of MJPEG video
 func getOpenglContent(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "multipart/x-mixed-replace; boundary="+boundary)
-	//w.Header().Set("Cache-Control", "no-cache")
-	renderOpengl(w)
+	w.Write([]byte("\r\n--" + boundary + "\r\n"))
+	// Render the scene on hidden window and send the rendered framebuffer over HTTP
+	renderOpengl(func() {
+		pixData := make([]byte, windowWidth*windowHeight*4)
+		sendFrame(w, pixData)
+	})
 }
 
-func renderOpengl(w http.ResponseWriter) {
+// sendFrame retrieves and stores current framebuffer color contents, encodes
+// it as JPEG file and sends over the HTTP as a MJPEG image
+func sendFrame(w http.ResponseWriter, pixBuffer []byte) {
+	// Create a buffer to store render buffer data
+	//pixData := make([]byte, windowWidth*windowHeight*4)
+	// Grab the pixels from the current frame buffer
+	//gl.ReadBuffer(gl.FRONT_LEFT)
+	gl.ReadPixels(0, 0, windowWidth, windowHeight, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(pixBuffer))
+	// Create jpeg image from of bytes just retrieved from opengl framebuffer
+	img := &image.RGBA{Pix: pixBuffer, Stride: windowWidth * 4, Rect: image.Rect(0, 0, windowWidth, windowHeight)}
+	var buff bytes.Buffer
+	jpeg.Encode(&buff, img, nil)
+	imgBytes := buff.Bytes()
+	w.Write([]byte("Content-Type: image/jpeg\r\nContent-Length: " + strconv.Itoa(len(imgBytes)) + "\r\n\r\n"))
+	w.Write(imgBytes)
+	w.Write([]byte("\r\n--" + boundary + "\r\n"))
+	// Otherwise buffer will be flushed only after handler exits or buffer maxsize is full
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func renderOpengl(sender func()) {
 	// GLFW event handling must run on the main OS thread
 	runtime.LockOSThread()
 
@@ -131,7 +157,7 @@ func renderOpengl(w http.ResponseWriter) {
 	angle := 0.0
 	previousTime := glfw.GetTime()
 	// To check for first rendered frame
-	firstFrame := true
+	//firstFrame := true
 	for !window.ShouldClose() {
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
@@ -154,28 +180,9 @@ func renderOpengl(w http.ResponseWriter) {
 
 		gl.DrawArrays(gl.TRIANGLES, 0, 6*2*3)
 
-		// Create a buffer to store render buffer data
-		pixData := make([]byte, windowWidth*windowHeight*4)
-		// Grab the pixels from the current frame buffer
-		//gl.ReadBuffer(gl.BACK_LEFT)
-		gl.ReadPixels(0, 0, windowWidth, windowHeight, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(pixData))
-		// Create jpeg image from of bytes just retrieved from opengl framebuffer
-		img := &image.RGBA{Pix: pixData, Stride: windowWidth * 4, Rect: image.Rect(0, 0, windowWidth, windowHeight)}
-		var buff bytes.Buffer
-		jpeg.Encode(&buff, img, nil)
-		imgBytes := buff.Bytes()
-		// Send jpeg image to client to client
-		if firstFrame {
-			w.Write([]byte("\r\n--" + boundary + "\r\n"))
-			firstFrame = false
-		}
-		w.Write([]byte("Content-Type: image/jpeg\r\nContent-Length: " + strconv.Itoa(len(imgBytes)) + "\r\n\r\n"))
-		w.Write(imgBytes)
-		w.Write([]byte("\r\n--" + boundary + "\r\n"))
-		// Otherwise buffer will be flushed only after handler exits or buffer maxsize is full
-		if f, ok := w.(http.Flusher); ok {
-			f.Flush()
-		}
+		// Reads the framebuffer encodes into JPEG format and sends over HTTP
+		sender()
+
 		// Maintenance
 		window.SwapBuffers()
 		glfw.PollEvents()
