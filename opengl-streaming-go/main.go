@@ -25,6 +25,7 @@ import (
 // Boundary will separate frames in M-JPEG animation transfer
 const boundary = "abcd4321"
 
+// Size of the ouput window
 const windowWidth = 800
 const windowHeight = 600
 
@@ -43,23 +44,16 @@ func main() {
 func getOpenglContent(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "multipart/x-mixed-replace; boundary="+boundary)
 	w.Write([]byte("\r\n--" + boundary + "\r\n"))
-	// Render the scene on hidden window and send the rendered framebuffer over HTTP
-	renderOpengl(func() {
-		pixData := make([]byte, windowWidth*windowHeight*4)
-		sendFrame(w, pixData)
+	// Render the scene on hidden window and send the rendered color buffer over HTTP
+	renderOpengl(func(buffer []byte) {
+		sendFrame(buffer, w)
 	})
 }
 
-// sendFrame retrieves and stores current framebuffer color contents, encodes
-// it as JPEG file and sends over the HTTP as a MJPEG image
-func sendFrame(w http.ResponseWriter, pixBuffer []byte) {
-	// Create a buffer to store render buffer data
-	//pixData := make([]byte, windowWidth*windowHeight*4)
-	// Grab the pixels from the current frame buffer
-	//gl.ReadBuffer(gl.FRONT_LEFT)
-	gl.ReadPixels(0, 0, windowWidth, windowHeight, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(pixBuffer))
+// senFrame sends the color data stored in colorBuffer over HTTP encoded as JPEG image
+func sendFrame(colorBuffer []byte, w http.ResponseWriter) {
 	// Create jpeg image from of bytes just retrieved from opengl framebuffer
-	img := &image.RGBA{Pix: pixBuffer, Stride: windowWidth * 4, Rect: image.Rect(0, 0, windowWidth, windowHeight)}
+	img := &image.RGBA{Pix: colorBuffer, Stride: windowWidth * 4, Rect: image.Rect(0, 0, windowWidth, windowHeight)}
 	var buff bytes.Buffer
 	jpeg.Encode(&buff, img, nil)
 	imgBytes := buff.Bytes()
@@ -72,7 +66,9 @@ func sendFrame(w http.ResponseWriter, pixBuffer []byte) {
 	}
 }
 
-func renderOpengl(sender func()) {
+// renderOpengl renders the scene on off-screen buffer, encodes it as JPEG ands it over HTTP
+// Anonymous sender function recieves pixel data and sends it over the connection
+func renderOpengl(sender func(buffer []byte)) {
 	// GLFW event handling must run on the main OS thread
 	runtime.LockOSThread()
 
@@ -80,6 +76,7 @@ func renderOpengl(sender func()) {
 		log.Fatalln("failed to initialize glfw:", err)
 	}
 	defer glfw.Terminate()
+	// Hide the window, we are interested only in the data that is in framebuffer
 	glfw.WindowHint(glfw.Visible, glfw.False)
 	glfw.WindowHint(glfw.Resizable, glfw.False)
 	glfw.WindowHint(glfw.ContextVersionMajor, 4)
@@ -156,8 +153,8 @@ func renderOpengl(sender func()) {
 
 	angle := 0.0
 	previousTime := glfw.GetTime()
-	// To check for first rendered frame
-	//firstFrame := true
+	// Create a buffer to store render color data
+	colorBuffer := make([]byte, windowWidth*windowHeight*4)
 	for !window.ShouldClose() {
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
@@ -180,8 +177,11 @@ func renderOpengl(sender func()) {
 
 		gl.DrawArrays(gl.TRIANGLES, 0, 6*2*3)
 
-		// Reads the framebuffer encodes into JPEG format and sends over HTTP
-		sender()
+		// Grab the pixels from the current frame buffer and store them in our color buffer
+		//gl.ReadBuffer(gl.FRONT_LEFT)
+		gl.ReadPixels(0, 0, windowWidth, windowHeight, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(colorBuffer))
+		// Encode it as JPEG and send over the connection
+		sender(colorBuffer)
 
 		// Maintenance
 		window.SwapBuffers()
