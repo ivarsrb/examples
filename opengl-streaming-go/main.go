@@ -177,8 +177,8 @@ func renderOpengl(sender func(buffer []byte)) {
 
 		gl.DrawArrays(gl.TRIANGLES, 0, 6*2*3)
 
-		// Grab the pixels from the current frame buffer and store them in our color buffer
-		//gl.ReadBuffer(gl.FRONT_LEFT)
+		// Grab the pixels from the current frame back buffer and store them in our color buffer
+		gl.ReadBuffer(gl.BACK_LEFT)
 		gl.ReadPixels(0, 0, windowWidth, windowHeight, gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(colorBuffer))
 		// Encode it as JPEG and send over the connection
 		sender(colorBuffer)
