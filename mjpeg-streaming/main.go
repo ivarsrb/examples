@@ -1,4 +1,4 @@
-// Package main shows an example for transferring jpeg stream over HTTP
+// Package main shows an example of transferring jpeg stream over HTTP
 package main
 
 import (

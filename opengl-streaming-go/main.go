@@ -7,6 +7,7 @@ import (
 	"image"
 	"image/draw"
 	"image/jpeg"
+	"runtime"
 	"strconv"
 
 	// To properly decode png texture
@@ -14,7 +15,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"runtime"
 	"strings"
 
 	"github.com/go-gl/gl/v4.1-core/gl"
@@ -69,7 +69,7 @@ func sendFrame(colorBuffer []byte, w http.ResponseWriter) {
 // renderOpengl renders the scene on off-screen buffer, encodes it as JPEG ands it over HTTP
 // Anonymous sender function recieves pixel data and sends it over the connection
 func renderOpengl(sender func(buffer []byte)) {
-	// GLFW event handling must run on the main OS thread
+	// We should lock this thread to a system thread for GLFW and OpenGL to work
 	runtime.LockOSThread()
 
 	if err := glfw.Init(); err != nil {
